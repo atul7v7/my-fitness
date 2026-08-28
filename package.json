@@ -1,0 +1,40 @@
+{
+  "name": "my-fitness",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "seed": "tsx src/lib/seed.ts"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "next-auth": "4.24.7",
+    "bcryptjs": "2.4.3",
+    "mongoose": "8.5.1",
+    "recharts": "2.12.7",
+    "cloudinary": "2.4.0",
+    "idb": "8.0.0",
+    "dexie": "4.0.8",
+    "date-fns": "3.6.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@types/bcryptjs": "2.4.6",
+    "autoprefixer": "10.4.19",
+    "postcss": "8.4.39",
+    "tailwindcss": "3.4.6",
+    "typescript": "5.5.3",
+    "tsx": "4.16.2",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.5",
+    "dotenv": "16.4.5"
+  }
+}
