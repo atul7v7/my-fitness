@@ -4,6 +4,7 @@ export interface ISet {
   weight: number;
   reps: number;
   rpe: number | null;
+  type?: "normal" | "drop";
 }
 
 export interface ILogEntry extends Document {
@@ -22,6 +23,7 @@ const SetSchema = new Schema(
     weight: { type: Number, required: true, min: 0 },
     reps: { type: Number, required: true, min: 0 },
     rpe: { type: Number, default: null, min: 0, max: 10 },
+    type: { type: String, enum: ["normal", "drop"], default: "normal" },
   },
   { _id: false }
 );

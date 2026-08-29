@@ -5,7 +5,7 @@ export interface QueuedLogEntry {
   payload: {
     exerciseId: string;
     date: string;
-    sets: { weight: number; reps: number; rpe: number | null }[];
+    sets: { weight: number; reps: number; rpe: number | null; type?: "normal" | "drop" }[];
     unit: "kg" | "lb";
     notes: string;
   };

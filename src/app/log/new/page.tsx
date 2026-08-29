@@ -68,6 +68,10 @@ function LogNewContent() {
     setSets((prev) => [...prev, { weight: 0, reps: 0, rpe: null }]);
   }
 
+  function addDropSet() {
+    setSets((prev) => [...prev, { weight: 0, reps: 0, rpe: null, type: "drop" }]);
+  }
+
   function removeSet(i: number) {
     setSets((prev) => prev.filter((_, idx) => idx !== i));
   }
@@ -228,7 +232,11 @@ function LogNewContent() {
             <div className="space-y-2">
               {sets.map((s, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500 w-6">#{i + 1}</span>
+                  {s.type === "drop" ? (
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1 py-0.5 w-10 text-center shrink-0">DROP</span>
+                  ) : (
+                    <span className="text-xs text-slate-500 w-10 text-center shrink-0">#{i + 1}</span>
+                  )}
                   <input
                     type="number"
                     inputMode="decimal"
@@ -273,13 +281,22 @@ function LogNewContent() {
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={addSet}
-              className="mt-2 text-sm text-brand-400 font-medium"
-            >
-              + Add Set
-            </button>
+            <div className="flex gap-4 mt-2">
+              <button
+                type="button"
+                onClick={addSet}
+                className="text-sm text-brand-400 font-medium"
+              >
+                + Add Set
+              </button>
+              <button
+                type="button"
+                onClick={addDropSet}
+                className="text-sm text-amber-400 font-medium"
+              >
+                + Add Drop Set
+              </button>
+            </div>
           </div>
 
           {/* Notes */}

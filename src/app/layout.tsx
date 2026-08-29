@@ -3,8 +3,8 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "My Fitness Tracker",
-  description: "Personal workout progressive-overload tracker",
+  title: "Fitness Training by Ashwani",
+  description: "Personal workout progressive-overload tracker with trainer coaching",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

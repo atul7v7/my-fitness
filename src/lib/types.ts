@@ -2,6 +2,8 @@ export interface SetDTO {
   weight: number;
   reps: number;
   rpe: number | null;
+  /** "drop" marks a drop set (reduced weight taken to failure right after a heavier set). */
+  type?: "normal" | "drop";
 }
 
 export interface LogEntryDTO {
@@ -40,6 +42,25 @@ export interface SuggestionDTO {
   message: string;
   suggestedSets: SetDTO[];
   unit: "kg" | "lb";
+}
+
+export interface TrainerDTO {
+  _id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface ConnectionDTO {
+  _id: string;
+  trainerId: string;
+  trainerName: string;
+  trainerEmail: string;
+  athleteId: string;
+  athleteName: string;
+  athleteEmail: string;
+  status: "pending" | "active";
+  createdAt: string;
 }
 
 export interface TrendPoint {

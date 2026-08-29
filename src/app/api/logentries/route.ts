@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import LogEntry from "@/lib/models/LogEntry";
+import TrainerConnection from "@/lib/models/TrainerConnection";
 import { requireAuth, requireRole } from "@/lib/role";
 import { computeTotalVolume } from "@/lib/suggestions";
 import type { LogEntryDTO, SetDTO } from "@/lib/types";
@@ -11,7 +12,7 @@ function toDTO(e: any): LogEntryDTO {
     exerciseId: e.exerciseId.toString(),
     userId: e.userId.toString(),
     date: e.date.toISOString(),
-    sets: (e.sets || []).map((s: any) => ({ weight: s.weight, reps: s.reps, rpe: s.rpe ?? null })),
+    sets: (e.sets || []).map((s: any) => ({ weight: s.weight, reps: s.reps, rpe: s.rpe ?? null, type: s.type === "drop" ? "drop" : "normal" })),
     unit: e.unit,
     totalVolume: e.totalVolume,
     notes: e.notes || "",
@@ -25,6 +26,7 @@ function validateSets(sets: SetDTO[]): string | null {
     if (typeof s.weight !== "number" || s.weight < 0) return "Weight must be a non-negative number";
     if (typeof s.reps !== "number" || s.reps < 0) return "Reps must be a non-negative number";
     if (s.rpe !== null && s.rpe !== undefined && (s.rpe < 0 || s.rpe > 10)) return "RPE must be between 0 and 10";
+    if (s.type !== undefined && s.type !== "normal" && s.type !== "drop") return "Set type must be normal or drop";
   }
   return null;
 }
@@ -41,8 +43,26 @@ export async function GET(req: Request) {
   const to = searchParams.get("to");
   const limit = parseInt(searchParams.get("limit") || "100", 10);
 
+  // A trainer may read a client's entries via ?athleteId= — only with an active connection.
+  let targetUserId = session.user.id;
+  const athleteId = searchParams.get("athleteId");
+  if (athleteId) {
+    if (session.user.role !== "instructor") {
+      return NextResponse.json({ error: "Only trainers can view another athlete's entries" }, { status: 403 });
+    }
+    const connection = await TrainerConnection.findOne({
+      trainerId: session.user.id,
+      athleteId,
+      status: "active",
+    });
+    if (!connection) {
+      return NextResponse.json({ error: "No active connection with this athlete" }, { status: 403 });
+    }
+    targetUserId = athleteId;
+  }
+
   await dbConnect();
-  const filter: Record<string, unknown> = { userId: session.user.id };
+  const filter: Record<string, unknown> = { userId: targetUserId };
   if (exerciseId) filter.exerciseId = exerciseId;
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.$gte = new Date(from);

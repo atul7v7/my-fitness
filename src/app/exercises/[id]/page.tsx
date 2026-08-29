@@ -192,8 +192,15 @@ export default function ExerciseDetailPage({ params }: { params: { id: string } 
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {e.sets.map((s, i) => (
-                      <span key={i} className="text-xs px-2 py-1 rounded bg-slate-700/60 text-slate-300">
-                        {s.weight}×{s.reps}{s.rpe ? `@{s.rpe}` : ""}
+                      <span
+                        key={i}
+                        className={`text-xs px-2 py-1 rounded ${
+                          s.type === "drop"
+                            ? "bg-amber-400/10 text-amber-300 border border-amber-400/30"
+                            : "bg-slate-700/60 text-slate-300"
+                        }`}
+                      >
+                        {s.type === "drop" ? "Drop " : ""}{s.weight}×{s.reps}{s.rpe ? ` @${s.rpe}` : ""}
                       </span>
                     ))}
                   </div>
