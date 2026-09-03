@@ -4,18 +4,26 @@ import { useEffect, useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { ExerciseDTO, SuggestionDTO, SetDTO } from "@/lib/types";
+import type { BodyPartDTO, ExerciseDTO, SuggestionDTO, SetDTO } from "@/lib/types";
 import { queueLogEntry } from "@/lib/offline-sync";
+
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function LogNewContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get("exerciseId");
+  const preselectedDate = searchParams.get("date");
 
+  const [bodyParts, setBodyParts] = useState<BodyPartDTO[]>([]);
+  const [bodyPartId, setBodyPartId] = useState("");
   const [exercises, setExercises] = useState<ExerciseDTO[]>([]);
   const [exerciseId, setExerciseId] = useState(preselectedId || "");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(preselectedDate || localToday());
   const [sets, setSets] = useState<SetDTO[]>([{ weight: 0, reps: 0, rpe: null }]);
   const [unit, setUnit] = useState<"kg" | "lb">("kg");
   const [notes, setNotes] = useState("");
@@ -32,10 +40,19 @@ function LogNewContent() {
       return;
     }
     setUnit(session.user.unitPreference);
-    fetch("/api/exercises")
-      .then((r) => r.json())
-      .then(setExercises);
-  }, [status, session, router]);
+    Promise.all([
+      fetch("/api/bodyparts").then((r) => r.json()),
+      fetch("/api/exercises").then((r) => r.json()),
+    ]).then(([bps, exs]) => {
+      setBodyParts(bps);
+      setExercises(exs);
+      // Arriving with ?exerciseId= — preselect that exercise's body part.
+      if (preselectedId) {
+        const pre = (exs as ExerciseDTO[]).find((e) => e._id === preselectedId);
+        if (pre?.bodyParts.length) setBodyPartId(pre.bodyParts[0]);
+      }
+    });
+  }, [status, session, router, preselectedId, preselectedDate]);
 
   // Fetch suggestion when exercise changes.
   useEffect(() => {
@@ -80,6 +97,22 @@ function LogNewContent() {
     if (suggestion) {
       setSets(suggestion.suggestedSets.map((s) => ({ ...s })));
       setUnit(suggestion.unit);
+    }
+  }
+
+  // Exercises visible for the chosen body part (empty selection = all).
+  const filteredExercises = bodyPartId
+    ? exercises.filter((ex) => ex.bodyParts.includes(bodyPartId))
+    : exercises;
+
+  function handleBodyPartChange(id: string) {
+    setBodyPartId(id);
+    if (!exerciseId) return;
+    const current = exercises.find((ex) => ex._id === exerciseId);
+    const stillVisible = id === "" || (current?.bodyParts.includes(id) ?? false);
+    if (!stillVisible) {
+      setExerciseId("");
+      setSuggestion(null);
     }
   }
 
@@ -157,6 +190,23 @@ function LogNewContent() {
 
       <main className="max-w-md mx-auto px-4 py-4">
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Body part selector — filters the exercise list */}
+          {bodyParts.length > 0 && (
+            <div>
+              <label className="block text-sm text-slate-300 mb-1.5">Body Part</label>
+              <select
+                value={bodyPartId}
+                onChange={(e) => handleBodyPartChange(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-brand-500"
+              >
+                <option value="">All body parts</option>
+                {bodyParts.map((bp) => (
+                  <option key={bp._id} value={bp._id}>{bp.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Exercise selector */}
           <div>
             <label className="block text-sm text-slate-300 mb-1.5">Exercise</label>
@@ -166,17 +216,24 @@ function LogNewContent() {
                 <Link href="/exercises/new" className="text-brand-400 text-sm font-medium">Create one →</Link>
               </div>
             ) : (
-              <select
-                value={exerciseId}
-                onChange={(e) => setExerciseId(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-brand-500"
-              >
-                <option value="">Select exercise...</option>
-                {exercises.map((ex) => (
-                  <option key={ex._id} value={ex._id}>{ex.name}</option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={exerciseId}
+                  onChange={(e) => setExerciseId(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-brand-500"
+                >
+                  <option value="">Select exercise...</option>
+                  {filteredExercises.map((ex) => (
+                    <option key={ex._id} value={ex._id}>{ex.name}</option>
+                  ))}
+                </select>
+                {bodyPartId && filteredExercises.length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1.5">
+                    No exercises for this body part yet — <Link href="/exercises/new" className="underline">create one</Link> or pick another body part.
+                  </p>
+                )}
+              </>
             )}
           </div>
 

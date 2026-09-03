@@ -184,9 +184,10 @@ export default function DashboardPage() {
         {/* Athlete view: recent workouts */}
         {isAthlete && (
           <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
-              Recent Workouts
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Recent Workouts</h2>
+              <Link href="/calendar" className="text-xs text-brand-400 font-medium">📅 Calendar</Link>
+            </div>
             {loading ? (
               <p className="text-slate-500 text-sm">Loading...</p>
             ) : entries.length === 0 ? (
