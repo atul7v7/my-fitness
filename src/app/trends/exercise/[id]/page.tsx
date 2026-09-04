@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import TrendView from "@/components/TrendView";
+import { cachedFetch } from "@/lib/api-cache";
 import type { ExerciseDTO } from "@/lib/types";
 
 export default function ExerciseTrendPage({ params }: { params: { id: string } }) {
@@ -15,7 +16,7 @@ export default function ExerciseTrendPage({ params }: { params: { id: string } }
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
     if (status !== "authenticated") return;
-    fetch(`/api/exercises/${params.id}`)
+    cachedFetch(`/api/exercises/${params.id}`)
       .then((r) => r.json())
       .then(setExercise);
   }, [status, params.id, router]);

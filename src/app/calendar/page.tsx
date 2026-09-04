@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { cachedFetch } from "@/lib/api-cache";
 import type { ExerciseDTO, LogEntryDTO } from "@/lib/types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -61,7 +62,7 @@ export default function CalendarPage() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(
+        const res = await cachedFetch(
           `/api/logentries?from=${monthKey}-01&to=${monthKey}-${pad(daysInMonth)}&limit=500`
         );
         const logs: LogEntryDTO[] = res.ok ? await res.json() : [];
@@ -78,8 +79,8 @@ export default function CalendarPage() {
   // Exercise names/body parts are month-independent — load once.
   useEffect(() => {
     if (status !== "authenticated") return;
-    fetch("/api/exercises")
-      .then((r) => r.json())
+    cachedFetch("/api/exercises")
+      .then((r) => (r.ok ? r.json() : []))
       .then((exs: ExerciseDTO[]) => setExerciseMap(Object.fromEntries(exs.map((e) => [e._id, e]))))
       .catch(() => {});
   }, [status]);

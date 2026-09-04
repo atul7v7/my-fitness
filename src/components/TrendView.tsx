@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import Link from "next/link";
 import type { TrendResult } from "@/lib/types";
+import { cachedFetch } from "@/lib/api-cache";
 
 interface Props {
   fetchUrl: string;
@@ -32,7 +34,7 @@ export default function TrendView({ fetchUrl, title, subtitle }: Props) {
       from.setDate(from.getDate() - range);
       url += `&from=${from.toISOString().slice(0, 10)}`;
     }
-    fetch(url)
+    cachedFetch(url)
       .then((r) => r.json())
       .then((d) => setData(d))
       .finally(() => setLoading(false));
@@ -171,6 +173,146 @@ export default function TrendView({ fetchUrl, title, subtitle }: Props) {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+const SUMMARY_CARDS: {
+  label: string;
+  key: "maxWeight" | "totalVolume" | "estimated1RM";
+  color: string;
+}[] = [
+  { label: "Top Weight", key: "maxWeight", color: "text-indigo-300" },
+  { label: "Top Volume", key: "totalVolume", color: "text-emerald-300" },
+  { label: "Best 1RM", key: "estimated1RM", color: "text-amber-300" },
+];
+
+function sparklineData(trend: TrendResult) {
+  return trend.points.map((p) => ({
+    date: new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    maxWeight: p.maxWeight,
+    totalVolume: p.totalVolume,
+    estimated1RM: Math.round(p.estimated1RM * 10) / 10,
+  }));
+}
+
+function StatsCards({ trend }: { trend: TrendResult }) {
+  const best = trend.points.reduce(
+    (acc, p) => {
+      acc.maxWeight = Math.max(acc.maxWeight, p.maxWeight);
+      acc.totalVolume = Math.max(acc.totalVolume, p.totalVolume);
+      acc.estimated1RM = Math.max(acc.estimated1RM, p.estimated1RM);
+      return acc;
+    },
+    { maxWeight: 0, totalVolume: 0, estimated1RM: 0 }
+  );
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {SUMMARY_CARDS.map((c) => (
+        <div key={c.label} className="rounded-xl bg-slate-800/60 border border-slate-800 p-3 text-center">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{c.label}</p>
+          <p className={`text-base font-bold ${c.color}`}>{Math.round(best[c.key] * 10) / 10}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TrendSparkline({ data, color }: { data: ReturnType<typeof sparklineData>; color: string }) {
+  return (
+    <ResponsiveContainer width="100%" height={90}>
+      <LineChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -30 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 9 }} interval="preserveStartEnd" />
+        <YAxis tick={{ fill: "#64748b", fontSize: 9 }} domain={["auto", "auto"]} />
+        <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }} />
+        <Line type="monotone" dataKey="maxWeight" stroke={color} strokeWidth={2} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+interface PerExercisePanelProps {
+  name: string;
+  linkHref: string;
+  trend: TrendResult;
+  exerciseColor: string;
+}
+
+/**
+ * Compact trend analysis for one exercise, used in the body-part breakdown
+ * list. Each exercise gets its own summary cards, its own sparkline and its
+ * own then-vs-now + PR stats, so the analysis is always for that exercise
+ * only and never blended with other movements of the same body part.
+ */
+export function PerExerciseTrendPanel({ name, linkHref, trend, exerciseColor }: PerExercisePanelProps) {
+  const tvn = trend.thenVsNow;
+  const hasThenVsNow = tvn.earliest !== null && tvn.latest !== null;
+  return (
+    <div className="rounded-2xl bg-slate-800/60 border border-slate-800 p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-white truncate">{name}</h3>
+        <Link href={linkHref} className="text-xs text-brand-400 font-medium whitespace-nowrap">
+          Full analysis →
+        </Link>
+      </div>
+
+      <StatsCards trend={trend} />
+
+      {trend.points.length >= 2 && (
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Max Weight Over Time</p>
+          <TrendSparkline data={sparklineData(trend)} color={exerciseColor} />
+        </div>
+      )}
+
+      {hasThenVsNow && (
+        <div className="pt-2 border-t border-slate-700/70">
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-slate-900/60 p-2">
+              <p className="text-[10px] text-slate-500 mb-0.5">Then</p>
+              <p className="text-xs text-white">
+                {tvn.earliest!.topSet.weight}×{tvn.earliest!.topSet.reps}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-900/60 p-2">
+              <p className="text-[10px] text-slate-500 mb-0.5">Now</p>
+              <p className="text-xs text-white">
+                {tvn.latest!.topSet.weight}×{tvn.latest!.topSet.reps}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-2">
+            {tvn.weightChangePct !== null && (
+              <span className="flex-1 text-center text-[11px] rounded-lg bg-slate-900/40 py-1.5 text-slate-300">
+                Weight{" "}
+                <span className={`font-bold ${tvn.weightChangePct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {tvn.weightChangePct >= 0 ? "+" : ""}
+                  {tvn.weightChangePct.toFixed(0)}%
+                </span>
+              </span>
+            )}
+            {tvn.volumeChangePct !== null && (
+              <span className="flex-1 text-center text-[11px] rounded-lg bg-slate-900/40 py-1.5 text-slate-300">
+                Volume{" "}
+                <span className={`font-bold ${tvn.volumeChangePct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {tvn.volumeChangePct >= 0 ? "+" : ""}
+                  {tvn.volumeChangePct.toFixed(0)}%
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {trend.prs.heaviestSet && (
+        <div className="pt-2 border-t border-slate-700/70 flex items-center justify-between">
+          <span className="text-xs text-slate-400">🏆 Heaviest Set</span>
+          <span className="text-xs text-white font-medium">
+            {trend.prs.heaviestSet.weight} × {trend.prs.heaviestSet.reps}
+          </span>
+        </div>
       )}
     </div>
   );

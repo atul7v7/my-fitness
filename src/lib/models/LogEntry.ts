@@ -47,5 +47,9 @@ const LogEntrySchema = new Schema(
 LogEntrySchema.index({ userId: 1, exerciseId: 1, date: -1 });
 // { userId: 1, date: -1 } — general "all my recent workouts" feed
 LogEntrySchema.index({ userId: 1, date: -1 });
+// { userId: 1, date: 1 } — month-range queries (calendar) sort date ascending
+// when the trainer dashboard needs oldest sessions; also lets the query
+// planner pick the better index for { userId, date: { $gte, $lte } } scans
+LogEntrySchema.index({ userId: 1, date: 1 });
 
 export default mongoose.models.LogEntry || mongoose.model<ILogEntry>("LogEntry", LogEntrySchema);

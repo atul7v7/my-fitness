@@ -5,9 +5,11 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { LogEntryDTO, SetDTO } from "@/lib/types";
+import { invalidateCache } from "@/lib/api-cache";
 
 export default function EditLogPage({ params }: { params: { id: string } }) {
   const { data: session, status } = useSession();
+  const entryId = params.id;
   const router = useRouter();
   const [entry, setEntry] = useState<LogEntryDTO | null>(null);
   const [date, setDate] = useState("");
@@ -25,10 +27,10 @@ export default function EditLogPage({ params }: { params: { id: string } }) {
       router.push("/dashboard");
       return;
     }
-    fetch(`/api/logentries?limit=200`)
+    fetch(`/api/logentries?limit=1&_id=${encodeURIComponent(entryId)}`)
       .then((r) => r.json())
       .then((data: LogEntryDTO[]) => {
-        const found = data.find((e) => e._id === params.id);
+        const found = data[0];
         if (found) {
           setEntry(found);
           setDate(found.date.slice(0, 10));
@@ -38,7 +40,7 @@ export default function EditLogPage({ params }: { params: { id: string } }) {
         }
       })
       .finally(() => setLoading(false));
-  }, [status, session, params.id, router]);
+  }, [status, session, entryId, router]);
 
   if (status !== "authenticated" || session?.user.role !== "athlete") {
     return <div className="min-h-screen flex items-center justify-center"><p className="text-slate-400">Loading...</p></div>;
@@ -92,6 +94,8 @@ export default function EditLogPage({ params }: { params: { id: string } }) {
     });
     setSaving(false);
     if (res.ok) {
+      invalidateCache("/api/logentries");
+      invalidateCache("/api/trends");
       router.push(`/exercises/${entry!.exerciseId}`);
     } else {
       const data = await res.json();
@@ -102,7 +106,11 @@ export default function EditLogPage({ params }: { params: { id: string } }) {
   async function handleDelete() {
     if (!confirm("Delete this log entry?")) return;
     const res = await fetch(`/api/logentries/${params.id}`, { method: "DELETE" });
-    if (res.ok) router.push(`/exercises/${entry!.exerciseId}`);
+    if (res.ok) {
+      invalidateCache("/api/logentries");
+      invalidateCache("/api/trends");
+      router.push(`/exercises/${entry!.exerciseId}`);
+    }
   }
 
   return (

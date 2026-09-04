@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ExerciseDTO, LogEntryDTO } from "@/lib/types";
+import { cachedFetch, invalidateCache } from "@/lib/api-cache";
 
 export default function ExerciseDetailPage({ params }: { params: { id: string } }) {
   const { data: session, status } = useSession();
@@ -21,8 +22,8 @@ export default function ExerciseDetailPage({ params }: { params: { id: string } 
     (async () => {
       try {
         const [exRes, logRes] = await Promise.all([
-          fetch(`/api/exercises/${params.id}`),
-          fetch(`/api/logentries?exerciseId=${params.id}&limit=50`),
+          cachedFetch(`/api/exercises/${params.id}`),
+          cachedFetch(`/api/logentries?exerciseId=${params.id}&limit=50`),
         ]);
         if (exRes.ok) setExercise(await exRes.json());
         if (logRes.ok) setEntries(await logRes.json());
@@ -67,6 +68,8 @@ export default function ExerciseDetailPage({ params }: { params: { id: string } 
         body: JSON.stringify({ secure_url: uploadData.secure_url, public_id: uploadData.public_id }),
       });
       if (saveRes.ok) {
+        invalidateCache(`/api/exercises/${params.id}`);
+        invalidateCache("/api/exercises");
         const updated = await saveRes.json();
         setExercise((prev) => prev ? { ...prev, videoUrl: updated.videoUrl, videoPublicId: updated.videoPublicId, videoUploadedAt: updated.videoUploadedAt } : prev);
       } else {
@@ -83,6 +86,8 @@ export default function ExerciseDetailPage({ params }: { params: { id: string } 
     if (!confirm("Delete this video?")) return;
     const res = await fetch(`/api/video/${params.id}`, { method: "DELETE" });
     if (res.ok) {
+      invalidateCache(`/api/exercises/${params.id}`);
+      invalidateCache("/api/exercises");
       setExercise((prev) => prev ? { ...prev, videoUrl: null, videoPublicId: null, videoUploadedAt: null, videoUploadedBy: null } : prev);
     }
   }
@@ -90,7 +95,11 @@ export default function ExerciseDetailPage({ params }: { params: { id: string } 
   async function handleDeleteExercise() {
     if (!confirm("Delete this exercise and all its log entries?")) return;
     const res = await fetch(`/api/exercises/${params.id}`, { method: "DELETE" });
-    if (res.ok) router.push("/exercises");
+    if (res.ok) {
+      invalidateCache("/api/exercises");
+      invalidateCache("/api/logentries");
+      router.push("/exercises");
+    }
   }
 
   if (loading) {

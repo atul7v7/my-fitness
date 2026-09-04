@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { cachedFetch, invalidateCache } from "@/lib/api-cache";
 import type { LogEntryDTO, ExerciseDTO, ConnectionDTO } from "@/lib/types";
 
 export default function DashboardPage() {
@@ -26,12 +27,12 @@ export default function DashboardPage() {
     (async () => {
       try {
         if (session.user.role === "instructor") {
-          const cRes = await fetch("/api/connections");
+          const cRes = await cachedFetch("/api/connections");
           if (cRes.ok) setConnections(await cRes.json());
         } else {
           const [logRes, exRes] = await Promise.all([
-            fetch("/api/logentries?limit=20"),
-            fetch("/api/exercises"),
+            cachedFetch("/api/logentries?limit=20"),
+            cachedFetch("/api/exercises"),
           ]);
           const logs = await logRes.json();
           const exs: ExerciseDTO[] = await exRes.json();
@@ -63,6 +64,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ action }),
     });
     if (res.ok) {
+      invalidateCache("/api/connections");
       setConnections((prev) =>
         action === "approve"
           ? prev.map((c) => (c._id === connectionId ? { ...c, status: "active" as const } : c))

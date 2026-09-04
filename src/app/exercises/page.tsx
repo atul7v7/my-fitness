@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { cachedFetch } from "@/lib/api-cache";
 import type { ExerciseDTO, BodyPartDTO } from "@/lib/types";
 
 export default function ExercisesPage() {
@@ -25,8 +26,8 @@ export default function ExercisesPage() {
     (async () => {
       try {
         const [exRes, bpRes] = await Promise.all([
-          fetch("/api/exercises"),
-          fetch("/api/bodyparts"),
+          cachedFetch("/api/exercises"),
+          cachedFetch("/api/bodyparts"),
         ]);
         setExercises(await exRes.json());
         setBodyParts(await bpRes.json());

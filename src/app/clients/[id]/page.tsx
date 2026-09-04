@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ExerciseDTO, LogEntryDTO } from "@/lib/types";
+import { cachedFetch } from "@/lib/api-cache";
 
 export default function ClientDetailPage({ params }: { params: { id: string } }) {
   const { data: session, status } = useSession();
@@ -24,8 +25,8 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     (async () => {
       try {
         const [logRes, exRes] = await Promise.all([
-          fetch(`/api/logentries?athleteId=${params.id}&limit=50`),
-          fetch("/api/exercises"),
+          cachedFetch(`/api/logentries?athleteId=${params.id}&limit=50`),
+          cachedFetch("/api/exercises"),
         ]);
         if (!logRes.ok) {
           const data = await logRes.json();

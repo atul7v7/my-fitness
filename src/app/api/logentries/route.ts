@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import LogEntry from "@/lib/models/LogEntry";
 import TrainerConnection from "@/lib/models/TrainerConnection";
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const exerciseId = searchParams.get("exerciseId");
+  const id = searchParams.get("_id");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const limit = parseInt(searchParams.get("limit") || "100", 10);
@@ -63,6 +65,14 @@ export async function GET(req: Request) {
 
   await dbConnect();
   const filter: Record<string, unknown> = { userId: targetUserId };
+  // Ownership is enforced on the userId filter; _id is only used to narrow to
+  // a single entry (edit-page lookup).
+  if (id) {
+    if (!mongoose.isValidObjectId(id)) {
+      return NextResponse.json({ error: "Invalid entry id" }, { status: 400 });
+    }
+    filter._id = id;
+  }
   if (exerciseId) filter.exerciseId = exerciseId;
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.$gte = new Date(from);
@@ -70,7 +80,10 @@ export async function GET(req: Request) {
   if (Object.keys(dateFilter).length) filter.date = dateFilter;
 
   const entries = (await LogEntry.find(filter).sort({ date: -1 }).limit(limit).lean()) as any[];
-  return NextResponse.json(entries.map(toDTO));
+  return NextResponse.json(
+    entries.map(toDTO),
+    { headers: { "Cache-Control": "no-store" } } // Freshness handled by the client cache.
+  );
 }
 
 // POST /api/logentries — athlete only

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { BodyPartDTO } from "@/lib/types";
+import { cachedFetch, invalidateCache } from "@/lib/api-cache";
 
 export default function NewExercisePage() {
   const { data: session, status } = useSession();
@@ -24,7 +25,7 @@ export default function NewExercisePage() {
       router.push("/exercises");
       return;
     }
-    fetch("/api/bodyparts")
+    cachedFetch("/api/bodyparts")
       .then((r) => r.json())
       .then(setBodyParts);
   }, [status, session, router]);
@@ -45,6 +46,7 @@ export default function NewExercisePage() {
       body: JSON.stringify({ name: newBpName.trim() }),
     });
     if (res.ok) {
+      invalidateCache("/api/bodyparts");
       const bp = await res.json();
       setBodyParts((prev) => [...prev, bp].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedBps((prev) => [...prev, bp._id]);
@@ -66,6 +68,7 @@ export default function NewExercisePage() {
     });
     setSaving(false);
     if (res.ok) {
+      invalidateCache("/api/exercises");
       router.push("/exercises");
     } else {
       const data = await res.json();

@@ -84,3 +84,17 @@ export interface TrendResult {
     bestEstimated1RM: { value: number; date: string } | null;
   };
 }
+
+export interface ExerciseTrendBreakdown {
+  exerciseId: string;
+  name: string;
+  trend: TrendResult;
+}
+
+/** Response of GET /api/trends/bodypart/[id]: per-exercise trend analyses. */
+export interface BodyPartTrendResult {
+  bodyPartId: string;
+  loggedExercises: number;
+  totalExercises: number;
+  breakdown: ExerciseTrendBreakdown[];
+}

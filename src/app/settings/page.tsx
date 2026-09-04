@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { clearCache } from "@/lib/api-cache";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
@@ -84,7 +85,10 @@ export default function SettingsPage() {
         {/* Sign out */}
         <section>
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => {
+              clearCache();
+              signOut({ callbackUrl: "/login" });
+            }}
             className="w-full py-3 rounded-xl bg-red-900/30 text-red-400 font-semibold border border-red-900/50 active:scale-[0.98] transition"
           >
             Sign Out

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import type { TrainerDTO, ConnectionDTO } from "@/lib/types";
+import { cachedFetch, invalidateCache } from "@/lib/api-cache";
 
 export default function TrainerPage() {
   const { data: session, status } = useSession();
@@ -26,8 +27,8 @@ export default function TrainerPage() {
     (async () => {
       try {
         const [tRes, cRes] = await Promise.all([
-          fetch("/api/trainers"),
-          fetch("/api/connections"),
+          cachedFetch("/api/trainers"),
+          cachedFetch("/api/connections"),
         ]);
         if (tRes.ok) setTrainers(await tRes.json());
         if (cRes.ok) setConnections(await cRes.json());
@@ -53,6 +54,7 @@ export default function TrainerPage() {
     });
     setBusyId(null);
     if (res.ok) {
+      invalidateCache("/api/connections");
       const c: ConnectionDTO = await res.json();
       setConnections((prev) => [c, ...prev]);
     } else {
@@ -68,6 +70,7 @@ export default function TrainerPage() {
     const res = await fetch(`/api/connections/${connectionId}`, { method: "DELETE" });
     setBusyId(null);
     if (res.ok) {
+      invalidateCache("/api/connections");
       setConnections((prev) => prev.filter((c) => c._id !== connectionId));
     } else {
       const data = await res.json();

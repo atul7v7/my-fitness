@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { BodyPartDTO, ExerciseDTO, SuggestionDTO, SetDTO } from "@/lib/types";
+import { cachedFetch, invalidateCache } from "@/lib/api-cache";
 import { queueLogEntry } from "@/lib/offline-sync";
 
 function localToday(): string {
@@ -41,8 +42,8 @@ function LogNewContent() {
     }
     setUnit(session.user.unitPreference);
     Promise.all([
-      fetch("/api/bodyparts").then((r) => r.json()),
-      fetch("/api/exercises").then((r) => r.json()),
+      cachedFetch("/api/bodyparts").then((r) => r.json()),
+      cachedFetch("/api/exercises").then((r) => r.json()),
     ]).then(([bps, exs]) => {
       setBodyParts(bps);
       setExercises(exs);
@@ -60,7 +61,7 @@ function LogNewContent() {
       setSuggestion(null);
       return;
     }
-    fetch(`/api/logentries/suggestion?exerciseId=${exerciseId}`)
+    cachedFetch(`/api/logentries/suggestion?exerciseId=${exerciseId}`)
       .then((r) => r.json())
       .then((data) => setSuggestion(data.suggestion));
   }, [exerciseId]);
@@ -146,6 +147,8 @@ function LogNewContent() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        invalidateCache("/api/logentries");
+        invalidateCache("/api/trends");
         router.push(`/exercises/${exerciseId}`);
       } else if (!navigator.onLine) {
         // Offline — queue for later sync.
