@@ -88,6 +88,8 @@ export function buildTrend(entries: LogEntryDTO[]): TrendResult {
       maxWeight: top?.weight ?? 0,
       totalVolume: e.totalVolume,
       estimated1RM: top ? estimated1RM(top.weight, top.reps) : 0,
+      sets: e.sets.map((s) => ({ weight: s.weight, reps: s.reps, rpe: s.rpe ?? null })),
+      unit: e.unit,
     };
   });
 

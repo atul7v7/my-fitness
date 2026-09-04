@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import Link from "next/link";
-import type { TrendResult } from "@/lib/types";
+import type { SetDTO, TrendPoint, TrendResult } from "@/lib/types";
 import { cachedFetch } from "@/lib/api-cache";
 
 interface Props {
@@ -142,6 +142,16 @@ export default function TrendView({ fetchUrl, title, subtitle }: Props) {
             </div>
           )}
 
+          {/* Set-by-set weight comparison across dates */}
+          <div className="rounded-2xl bg-slate-800/60 border border-slate-800 p-4">
+            <h3 className="text-sm font-semibold text-slate-300 mb-1">Weight Comparison by Date</h3>
+            <p className="text-[11px] text-slate-500 mb-3">
+              One column per session, earliest to latest. Read across a row to compare the same set —
+              arrows show the change versus the previous session&apos;s set.
+            </p>
+            <SetComparisonTable points={data.points} />
+          </div>
+
           {/* PRs */}
           <div className="rounded-2xl bg-slate-800/60 border border-slate-800 p-4">
             <h3 className="text-sm font-semibold text-slate-300 mb-3">Personal Records</h3>
@@ -230,6 +240,102 @@ function TrendSparkline({ data, color }: { data: ReturnType<typeof sparklineData
         <Line type="monotone" dataKey="maxWeight" stroke={color} strokeWidth={2} dot={false} />
       </LineChart>
     </ResponsiveContainer>
+  );
+}
+
+function formatWeight(w: number): string {
+  return Number.isInteger(w) ? String(w) : String(Math.round(w * 10) / 10);
+}
+
+function formatDateLabel(iso: string): string {
+  const d = new Date(iso);
+  const mdy = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.getFullYear() === new Date().getFullYear()
+    ? mdy
+    : `${mdy} '${String(d.getFullYear()).slice(2)}`;
+}
+
+/** Change marker for one set versus the same set number in the previous session. */
+function SetChangeCell({
+  prev,
+  prevUnit,
+  curr,
+  unit,
+}: {
+  prev: SetDTO | undefined;
+  prevUnit: "kg" | "lb" | undefined;
+  curr: SetDTO;
+  unit: "kg" | "lb";
+}) {
+  if (!prev || prevUnit !== unit) return <span className="text-slate-600">—</span>;
+  const wDiff = curr.weight - prev.weight;
+  const rDiff = curr.reps - prev.reps;
+  if (wDiff > 0.001) return <span className="text-green-400">▲ +{formatWeight(wDiff)}{unit}</span>;
+  if (wDiff < -0.001) return <span className="text-red-400">▼ {formatWeight(-wDiff)}{unit}</span>;
+  if (rDiff > 0) return <span className="text-green-400">▲ +{rDiff} rep{rDiff > 1 ? "s" : ""}</span>;
+  if (rDiff < 0) return <span className="text-red-400">▼ {-rDiff} rep{-rDiff > 1 ? "s" : ""}</span>;
+  return <span className="text-slate-600">—</span>;
+}
+
+/** Session columns × set-number rows: every set's weight × reps per logged date. */
+function SetComparisonTable({ points }: { points: TrendPoint[] }) {
+  const maxSets = points.reduce((m, p) => Math.max(m, p.sets.length), 0);
+  if (maxSets === 0) return null;
+
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <table className="w-full border-collapse text-[11px]">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-10 bg-slate-800 text-left font-semibold text-slate-300 px-2 py-1.5 border-b border-slate-700 whitespace-nowrap">
+              Set
+            </th>
+            {points.map((p, j) => (
+              <th
+                key={`${j}-${p.date}`}
+                className="px-2 py-1.5 border-b border-slate-700 text-right font-semibold text-slate-300 whitespace-nowrap"
+              >
+                <div>{formatDateLabel(p.date)}</div>
+                <div className="text-[9px] font-normal text-slate-500">{p.unit}</div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: maxSets }, (_, i) => (
+            <tr key={i}>
+              <td className="sticky left-0 z-10 bg-slate-800 px-2 py-1.5 font-medium text-slate-400 whitespace-nowrap">
+                Set {i + 1}
+              </td>
+              {points.map((p, j) => {
+                const curr = p.sets[i];
+                const prev = j > 0 ? points[j - 1].sets[i] : undefined;
+                const prevUnit = j > 0 ? points[j - 1].unit : undefined;
+                return (
+                  <td
+                    key={`${j}-${p.date}`}
+                    className="px-2 py-1.5 text-right whitespace-nowrap border-b border-slate-800"
+                  >
+                    {curr ? (
+                      <>
+                        <div className="text-white font-medium">
+                          {formatWeight(curr.weight)}×{curr.reps}
+                        </div>
+                        <div className="text-[9px] leading-tight">
+                          <SetChangeCell prev={prev} prevUnit={prevUnit} curr={curr} unit={p.unit} />
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-slate-700">—</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -68,6 +68,9 @@ export interface TrendPoint {
   maxWeight: number;
   totalVolume: number;
   estimated1RM: number;
+  /** Every set lifted in that session, in logged order (for set-by-set comparison). */
+  sets: SetDTO[];
+  unit: "kg" | "lb";
 }
 
 export interface TrendResult {
