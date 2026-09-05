@@ -21,6 +21,20 @@ const RANGES = [
   { label: "All", days: 0 },
 ];
 
+/** One session point enriched with per-set data and deltas vs the prior session. */
+interface ChartDatum {
+  date: string;
+  fullDate: string;
+  maxWeight: number;
+  totalVolume: number;
+  estimated1RM: number;
+  sets: SetDTO[];
+  unit: "kg" | "lb";
+  maxWeightDelta: number | null;
+  volumeDelta: number | null;
+  volumeDeltaPct: number | null;
+}
+
 export default function TrendView({ fetchUrl, title, subtitle }: Props) {
   const [range, setRange] = useState(30);
   const [data, setData] = useState<TrendResult | null>(null);
@@ -40,12 +54,30 @@ export default function TrendView({ fetchUrl, title, subtitle }: Props) {
       .finally(() => setLoading(false));
   }, [fetchUrl, range]);
 
-  const chartData = (data?.points || []).map((p) => ({
-    date: new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    maxWeight: p.maxWeight,
-    totalVolume: p.totalVolume,
-    estimated1RM: Math.round(p.estimated1RM * 10) / 10,
-  }));
+  const chartData: ChartDatum[] = (data?.points || []).map((p, i) => {
+    const prev = i > 0 && data ? data.points[i - 1] : null;
+    const sameUnit = prev !== null && prev.unit === p.unit;
+    return {
+      date: new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      fullDate: new Date(p.date).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      maxWeight: p.maxWeight,
+      totalVolume: p.totalVolume,
+      estimated1RM: Math.round(p.estimated1RM * 10) / 10,
+      sets: p.sets,
+      unit: p.unit,
+      maxWeightDelta: sameUnit && prev!.maxWeight > 0 ? p.maxWeight - prev!.maxWeight : null,
+      volumeDelta: prev ? p.totalVolume - prev!.totalVolume : null,
+      volumeDeltaPct:
+        prev && prev!.totalVolume > 0
+          ? ((p.totalVolume - prev!.totalVolume) / prev!.totalVolume) * 100
+          : null,
+    };
+  });
 
   return (
     <div className="space-y-5">
@@ -80,7 +112,11 @@ export default function TrendView({ fetchUrl, title, subtitle }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 10 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }} />
+                <Tooltip
+                  content={
+                    <TrendChartTooltip metricKey="maxWeight" metricLabel="Max Weight" metricColor="#a5b4fc" />
+                  }
+                />
                 <Line type="monotone" dataKey="maxWeight" stroke="#818cf8" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -94,7 +130,11 @@ export default function TrendView({ fetchUrl, title, subtitle }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 10 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }} />
+                <Tooltip
+                  content={
+                    <TrendChartTooltip metricKey="totalVolume" metricLabel="Total Volume" metricColor="#6ee7b7" />
+                  }
+                />
                 <Line type="monotone" dataKey="totalVolume" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -240,6 +280,118 @@ function TrendSparkline({ data, color }: { data: ReturnType<typeof sparklineData
         <Line type="monotone" dataKey="maxWeight" stroke={color} strokeWidth={2} dot={false} />
       </LineChart>
     </ResponsiveContainer>
+  );
+}
+
+/** Inline change badge for a metric versus the previous session. */
+function MetricDeltaBadge({
+  delta,
+  unit,
+  pct,
+}: {
+  delta: number | null;
+  unit: "kg" | "lb";
+  pct?: number | null;
+}) {
+  if (delta === null) return null;
+  if (Math.abs(delta) < 0.001) {
+    return <span className="text-[10px] text-slate-500">Same as previous session</span>;
+  }
+  const up = delta > 0;
+  return (
+    <span className={`text-[11px] font-semibold ${up ? "text-green-400" : "text-red-400"}`}>
+      {up ? "▲ +" : "▼ "}
+      {formatWeight(Math.abs(delta))}
+      {unit}
+      {pct !== null && pct !== undefined ? ` (${up ? "+" : ""}${Math.round(Math.abs(pct))}%)` : ""}{" "}
+      vs previous
+    </span>
+  );
+}
+
+/**
+ * Rich tooltip for the two main trend charts. Shows the full date, the charted
+ * metric with unit, the change versus the previous session, and every set
+ * lifted that day so the user can see what actually drove the number.
+ */
+function TrendChartTooltip({
+  active,
+  payload,
+  metricKey,
+  metricLabel,
+  metricColor,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ payload?: ChartDatum }>;
+  metricKey: "maxWeight" | "totalVolume";
+  metricLabel: string;
+  metricColor: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  if (!p) return null;
+  const sets = p.sets || [];
+
+  return (
+    <div className="rounded-xl bg-slate-800 border border-slate-600/70 shadow-2xl px-3 py-2.5 text-left min-w-[200px]">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">
+        {p.fullDate}
+      </p>
+
+      <div className="flex items-baseline justify-between gap-5">
+        <span className="text-[11px] text-slate-400">{metricLabel}</span>
+        <span className="text-base font-bold" style={{ color: metricColor }}>
+          {formatWeight(p[metricKey])}
+          <span className="text-[10px] font-medium text-slate-400"> {p.unit}</span>
+        </span>
+      </div>
+
+      {metricKey === "maxWeight" && (
+        <p className="text-[10px] text-slate-500 mt-0.5">
+          Est. 1RM {formatWeight(p.estimated1RM)}
+          {p.unit}
+        </p>
+      )}
+
+      <div className="mt-1.5">
+        {metricKey === "maxWeight" ? (
+          <MetricDeltaBadge delta={p.maxWeightDelta} unit={p.unit} />
+        ) : (
+          <MetricDeltaBadge delta={p.volumeDelta} unit={p.unit} pct={p.volumeDeltaPct} />
+        )}
+      </div>
+
+      {sets.length > 0 && (
+        <>
+          <div className="my-2 border-t border-slate-700" />
+          <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">
+            Sets performed · {sets.length}
+          </p>
+          <div className="space-y-0.5">
+            {sets.map((s, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 text-[11px]">
+                <span className="text-slate-500 w-3">{i + 1}.</span>
+                <span className="text-white font-medium">
+                  {formatWeight(s.weight)}×{s.reps}
+                </span>
+                <span className="text-[9px] text-slate-500 min-w-[70px] text-right">
+                  {metricKey === "totalVolume"
+                    ? `= ${Math.round(s.weight * s.reps)}${p.unit}`
+                    : s.rpe !== null
+                      ? `RPE ${s.rpe}`
+                      : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+          {metricKey === "totalVolume" && (
+            <p className="text-[9px] text-slate-500 mt-1 text-right">
+              Each set shows its own volume contribution
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
