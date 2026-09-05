@@ -1,60 +1,113 @@
-// Simple service worker for offline PWA support.
-// Caches the app shell for offline viewing and queues writes via IndexedDB
-// (handled in the app's offline-sync module).
+// Service worker for My Fitness Tracker.
+// Strategy:
+//   - Install: precache the app shell + icons so the app opens offline.
+//   - Navigations (HTML pages): network-first with a cache fallback so the
+//     user always gets the newest build when online but the page still opens
+//     offline from cache.
+//   - Static assets (/_next/, /icons/, fonts...): stale-while-revalidate —
+//     cache-first, refresh from network in the background.
+//   - /api/ requests: network-first with cache fallback (offline reads).
+//     Writes are queued by the app's offline-sync module, not here.
+//   - Cloudinary media is never intercepted.
 
-const CACHE_NAME = "fitness-tracker-v1";
-const APP_SHELL = [
+const VERSION = "v2";
+const CACHE_NAME = `fitness-tracker-${VERSION}`;
+const RUNTIME_CACHE = `${CACHE_NAME}-runtime`;
+
+const PRECACHE = [
   "/",
   "/dashboard",
   "/login",
+  "/register",
   "/manifest.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-192-maskable.png",
+  "/icons/icon-512-maskable.png",
+  "/icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL).catch(() => {}))
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
+      .catch(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k !== CACHE_NAME && k !== RUNTIME_CACHE)
+            .map((k) => caches.delete(k))
+        )
+      )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Network-first for API routes, cache-first for static assets.
+// Stale-while-revalidate: answer from cache instantly, refresh in the background.
+async function staleWhileRevalidate(request) {
+  const cached = await caches.match(request, { cacheName: RUNTIME_CACHE });
+  const network = fetch(request)
+    .then((response) => {
+      if (response && response.ok) {
+        const clone = response.clone();
+        caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+      }
+      return response;
+    })
+    .catch(() => undefined);
+  return cached || network;
+}
+
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
+  const { request } = event;
+  const url = new URL(request.url);
 
-  // Skip non-GET and Cloudinary requests.
-  if (event.request.method !== "GET") return;
-  if (url.hostname === "res.cloudinary.com") return;
+  // Only handle same-origin GETs.
+  if (request.method !== "GET") return;
+  if (url.origin !== self.location.origin) return;
 
-  // API requests: try network, fall back to cache.
+  // API: network-first, cache fallback for offline reads.
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request, { cacheName: RUNTIME_CACHE }))
     );
     return;
   }
 
-  // App shell: cache-first.
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return (
-        cached ||
-        fetch(event.request)
-          .then((response) => {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            return response;
-          })
-          .catch(() => cached)
-      );
-    })
-  );
+  // HTML navigations: network-first (fresh build), cached page as fallback.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+          return response;
+        })
+        .catch(() =>
+          caches
+            .match(request, { cacheName: RUNTIME_CACHE })
+            .then((cached) => cached || caches.match("/dashboard", { cacheName: RUNTIME_CACHE }))
+            .then((fallback) => fallback || caches.match("/dashboard", { cacheName: CACHE_NAME }))
+        )
+    );
+    return;
+  }
+
+  // Static assets: stale-while-revalidate.
+  event.respondWith(staleWhileRevalidate(request));
 });
